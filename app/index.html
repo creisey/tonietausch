@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><title>TonieTausch</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#f6f4ef;--ink:#222;--muted:#777;--accent:#d2372c;--ok:#2e7d32;--warn:#e65100}
+*{box-sizing:border-box}
+body{margin:0;font:15px -apple-system,system-ui,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
+header{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 20px;background:#fff;border-bottom:1px solid #e5e1d8;position:sticky;top:0;z-index:5}
+h1{font-size:20px;margin:0 12px 0 0}
+button,select{font:inherit;padding:7px 12px;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer}
+button:disabled{opacity:.4;cursor:default}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.warn{background:var(--warn);border-color:var(--warn);color:#fff}
+.spacer{flex:1}
+main{padding:20px}
+body.playing main{padding-bottom:300px}
+#hint{color:var(--muted);margin:0 0 16px;text-align:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
+.fig{background:#fff;border-radius:14px;padding:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:6px;border:2px dashed transparent}
+.fig.over{border-color:var(--accent);background:#fff5f4}
+.fig img,.ph{width:100%;aspect-ratio:1;object-fit:contain;border-radius:10px;background:#faf8f4}
+.ph{display:flex;align-items:center;justify-content:center;font-size:64px}
+.fig.deleted img,.fig.deleted .ph{opacity:.45}
+.name{font-weight:600;line-height:1.25}
+.serie{color:var(--muted);font-size:13px}
+.badge{align-self:flex-start;font-size:12px;padding:2px 8px;border-radius:99px;color:#fff}
+.b-original{background:#888}.b-eigen{background:var(--ok)}.b-ueberschrieben{background:var(--warn)}.b-live{background:#1565c0}
+.titles{font-size:13px;color:#444;margin:0;padding-left:20px;max-height:90px;overflow:auto}
+.drop{font-size:12px;color:var(--muted);text-align:center;border:1px dashed #ccc;border-radius:8px;padding:8px;cursor:pointer}
+.actions{display:flex;flex-direction:column;gap:6px}
+details#sys,details#del{margin-top:28px}
+details#sys summary,details#del summary{cursor:pointer;font-weight:600;color:var(--muted);margin-bottom:14px}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:10}
+.overlay.show{display:flex}
+.modal{background:#fff;border-radius:14px;padding:20px;width:min(560px,92vw);max-height:86vh;overflow:auto}
+.modal h2{margin:0 0 12px;font-size:18px}
+.modal h3{font-size:15px;margin:18px 0 4px}
+.modal label{display:block;margin:8px 0}
+.modal select{width:100%;margin-top:4px}
+#order{list-style:none;padding:0;margin:10px 0}
+#order li{display:flex;align-items:center;gap:6px;padding:8px;border:1px solid #e5e1d8;border-radius:8px;margin-bottom:6px;background:#fff;cursor:grab}
+#order li .n{width:28px;color:var(--muted)}
+#order li .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#order li button{padding:2px 9px}
+input[type=text]{width:100%;font:inherit;padding:8px;border:1px solid #ccc;border-radius:8px;margin-top:4px}
+.row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+#busyText{white-space:pre-wrap}
+.plain{list-style:none;padding:0;font-size:13px;color:#444}
+.tlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin:10px 0}
+.tlist .t{border:2px solid #e5e1d8;border-radius:10px;padding:6px;cursor:pointer;font-size:12px;text-align:center}
+.tlist .t.sel{border-color:var(--accent);background:#fff5f4}
+.tlist img,.tlist .ph{width:100%;aspect-ratio:1;object-fit:contain;font-size:40px}
+#player{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #e5e1d8;box-shadow:0 -2px 8px rgba(0,0,0,.08);padding:10px 20px;z-index:8;max-height:45vh;overflow:auto}
+#player audio{width:100%}
+.pinfo{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+#chapters{margin:8px 0 0;padding-left:24px;columns:2;font-size:13px}
+#chapters li{cursor:pointer;padding:2px 0}
+#chapters li.on{font-weight:600;color:var(--accent)}
+</style></head><body>
+<header>
+  <h1>🧸 TonieTausch</h1>
+  <select id="card"></select>
+  <button id="reload">Neu laden</button>
+  <span class="spacer"></span>
+  <button id="restoreAll" class="warn" hidden>Alle eigenen Titel wiederherstellen</button>
+  <button id="unhideAll" hidden>Alle LIVE-Flags entfernen (unhide)</button>
+  <button id="sdBtn">SD-Karte …</button>
+  <button id="export">Liste exportieren (CSV)</button>
+  <button id="quit">Beenden</button>
+</header>
+<main><p id="hint"></p><div id="grid" class="grid"></div>
+<details id="sys" hidden><summary id="sysSum">System</summary><div id="sysGrid" class="grid"></div></details>
+<details id="del" hidden><summary id="delSum">Gelöscht</summary><div id="delGrid" class="grid"></div></details></main>
+
+<div id="player" hidden>
+  <div class="pinfo"><b id="pName"></b><button id="pClose">✕ Schliessen</button></div>
+  <audio id="audio" controls preload="auto"></audio>
+  <ol id="chapters"></ol>
+</div>
+
+<div class="overlay" id="dlg"><div class="modal">
+  <h2 id="dlgTitle"></h2>
+  <label>Name des Inhalts<input type="text" id="cname" placeholder="z. B. Lieblingslieder"></label>
+  <p class="serie">Reihenfolge per Ziehen oder mit ↑ ↓ festlegen. Jeder Titel wird ein Kapitel. Weitere Dateien kannst du hier hineinziehen.</p>
+  <ul id="order"></ul>
+  <div class="row"><button id="cancel">Abbrechen</button><button class="primary" id="go">Auf die Figur laden</button></div>
+</div></div>
+
+<div class="overlay" id="sd"><div class="modal">
+  <h2>SD-Karte</h2>
+  <h3>1. Komplettsicherung</h3>
+  <p class="serie">Kopiert alle Dateien der oben ausgewählten Karte auf den Computer.</p>
+  <button id="sdBackup" class="primary">Aktuelle Karte sichern</button>
+  <ul id="sdList" class="plain"></ul>
+  <h3>2. Neue Karte vorbereiten</h3>
+  <p class="serie">Die Ziel-Karte wird komplett gelöscht, als FAT32 „TONIEBOX“ formatiert und mit der Sicherung befüllt. Nur für dieselbe Box verwenden.</p>
+  <label>Sicherung<select id="sdSrc"></select></label>
+  <label>Ziel-Karte<select id="sdDev"></select></label>
+  <div class="row"><button id="sdDevReload">Laufwerke neu laden</button><button id="sdPrep" class="warn">Karte vorbereiten</button></div>
+  <div class="row"><button id="sdClose">Schliessen</button></div>
+</div></div>
+
+<div class="overlay" id="tr"><div class="modal">
+  <h2 id="trTitle"></h2>
+  <p class="serie">Zielfigur wählen. Ihr Avatar bleibt, ihr bisheriger Inhalt wird gesichert.</p>
+  <div id="trList" class="tlist"></div>
+  <div class="row"><button id="trCancel">Abbrechen</button><button class="primary" id="trGo" disabled>Übertragen</button></div>
+</div></div>
+
+<div class="overlay" id="as"><div class="modal">
+  <h2 id="asTitle"></h2>
+  <input type="text" id="asQ" placeholder="Name oder Serie suchen, z. B. Bobo Siebenschläfer">
+  <div id="asList" class="tlist"></div>
+  <div class="row"><button id="asCancel">Abbrechen</button><button class="primary" id="asGo" disabled>Übernehmen</button></div>
+</div></div>
+
+<div class="overlay" id="busy"><div class="modal"><h2>Bitte warten …</h2><p id="busyText"></p></div></div>
+<input type="file" id="picker" multiple accept="audio/*,.mp3,.m4a,.wav,.flac,.ogg" hidden>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const LABEL={original:'Original',eigen:'Eigene Titel',ueberschrieben:'Original zurück!'};
+let figs=[],cur=null,files=[],dragIdx=null;
+
+async function api(path,opt){
+  const r=await fetch(path,opt);
+  const j=await r.json().catch(()=>({fehler:'Ungültige Antwort'}));
+  if(!r.ok||j.fehler)throw new Error(j.fehler||r.statusText);
+  return j;
+}
+const post=(p,b)=>api(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+const card=()=>$('#card').value;
+function busy(t){$('#busyText').textContent=t||'';$('#busy').classList.toggle('show',!!t);}
+const figImg=b=>b?`<img src="${esc(b)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=ph>🧸</div>'">`:'<div class="ph">🧸</div>';
+
+// ---- Karten & Figuren ----
+async function loadCards(){
+  const keep=card();
+  const {karten}=await api('/api/karten');
+  const sel=$('#card');sel.innerHTML='';
+  karten.forEach(k=>{const o=document.createElement('option');o.value=k.path;o.textContent='💾 '+k.name;sel.appendChild(o);});
+  if(karten.some(k=>k.path===keep))sel.value=keep;
+  sel.hidden=!karten.length;
+  await loadFigs();
+}
+
+async function loadFigs(){
+  $('#grid').innerHTML='';$('#sysGrid').innerHTML='';$('#sys').hidden=true;$('#delGrid').innerHTML='';$('#del').hidden=true;
+  figs=[];$('#restoreAll').hidden=true;$('#unhideAll').hidden=true;$('#export').disabled=!card();
+  if(!card()){$('#hint').textContent='Keine Toniebox-SD-Karte gefunden. Karte einstecken und „Neu laden“ klicken.';return;}
+  $('#hint').textContent='Lese Karte …';
+  let geloescht=[];
+  try{const r=await api('/api/figuren?karte='+encodeURIComponent(card()));figs=r.figuren;geloescht=r.geloescht||[];}
+  catch(e){$('#hint').textContent='Fehler: '+e.message;return;}
+  $('#hint').textContent=figs.length?'Ziehe MP3s auf eine Figur, um ihren Inhalt zu ersetzen.':'Keine Figuren auf der Karte. Jede Figur muss einmal auf der Box gespielt haben.';
+  $('#restoreAll').hidden=!figs.some(f=>f.status==='ueberschrieben');
+  $('#unhideAll').hidden=!figs.some(f=>f.live);
+  figs.forEach(render);
+  const n=figs.filter(f=>f.system).length;
+  $('#sys').hidden=!n;$('#sysSum').textContent='System ('+n+')';
+  geloescht.forEach(renderDeleted);
+  $('#del').hidden=!geloescht.length;$('#delSum').textContent='Gelöscht ('+geloescht.length+')';
+}
+
+function render(f){
+  const el=document.createElement('div');el.className='fig';
+  let titles='';
+  if(f.eigen&&f.eigen.titel.length){
+    titles=`<div class="serie">${esc(f.eigen.name||'Eigene Titel')}${f.status==='eigen'?'':' (gesichert)'}</div><ol class="titles">${f.eigen.titel.map(t=>`<li>${esc(t)}</li>`).join('')}</ol>`;
+  }
+  el.innerHTML=`${figImg(f.bild)}<div class="name">${esc(f.name)}</div><div class="serie">${esc(f.serie||f.key)}</div><span class="badge b-${f.status}">${LABEL[f.status]}</span>${f.live?'<span class="badge b-live">LIVE</span>':''}${titles}<div class="drop">MP3s hierher ziehen<br>oder klicken</div><div class="actions"></div>`;
+  const act=el.querySelector('.actions');
+  const btn=(txt,cls,fn)=>{const b=document.createElement('button');b.textContent=txt;if(cls)b.className=cls;b.onclick=fn;act.appendChild(b);};
+  btn('▶︎ Abspielen','',()=>play(f));
+  if(!f.system){
+    btn(f.live?'LIVE aus':'LIVE an','',()=>run2('/api/live',{karte:card(),key:f.key,an:!f.live},'LIVE-Flag wird geändert …'));
+    btn('🔍 Figur zuordnen',f.bild?'':'primary',()=>openAssign(f));
+    btn('⇢ Übertragen auf …','',()=>openTransfer(f));
+    btn('🗑 Löschen','',()=>{if(confirm('„'+f.name+'“ von der Karte löschen?\nEine Sicherung bleibt auf dem Computer, du kannst sie wiederherstellen.'))run('/api/loeschen',f,'Figur wird gelöscht …');});
+  }
+  if(f.status==='ueberschrieben')btn('Eigene Titel wiederherstellen','warn',()=>run('/api/eigene-zurueck',f,'Eigene Titel werden aufgespielt …'));
+  if(f.status==='original'&&f.eigen)btn('Eigene Titel aufspielen','',()=>run('/api/eigene-zurueck',f,'Eigene Titel werden aufgespielt …'));
+  if(f.status==='eigen'&&f.hatBackup)btn('Original zurück','',()=>{if(confirm('Original wieder aufspielen? Deine Titel bleiben gesichert.'))run('/api/original-zurueck',f,'Original wird aufgespielt …');});
+  el.querySelector('.drop').onclick=()=>{cur=f;$('#picker').click();};
+  el.addEventListener('dragover',e=>{e.preventDefault();el.classList.add('over');});
+  el.addEventListener('dragleave',()=>el.classList.remove('over'));
+  el.addEventListener('drop',e=>{e.preventDefault();el.classList.remove('over');openDlg(f,[...e.dataTransfer.files]);});
+  $(f.system?'#sysGrid':'#grid').appendChild(el);
+}
+
+function renderDeleted(f){
+  const el=document.createElement('div');el.className='fig deleted';
+  el.innerHTML=`${figImg(f.bild)}<div class="name">${esc(f.name)}</div><div class="serie">${esc(f.inhalt)}</div><div class="actions"></div>`;
+  const b=document.createElement('button');b.textContent='↺ Wiederherstellen';
+  b.onclick=()=>run('/api/geloescht-zurueck',f,'Figur wird wiederhergestellt …');
+  el.querySelector('.actions').appendChild(b);
+  $('#delGrid').appendChild(el);
+}
+
+async function run(path,f,msg){
+  busy(msg);
+  try{await post(path,{karte:card(),key:f.key});}catch(e){alert(e.message);}
+  busy('');loadFigs();
+}
+async function run2(path,body,msg){
+  busy(msg);
+  try{await post(path,body);}catch(e){alert(e.message);}
+  busy('');loadFigs();
+}
+
+// ---- Aufspielen ----
+function openDlg(f,list){
+  list=list.filter(x=>x.size>0);
+  if(!list.length)return;
+  cur=f;files=list.sort((a,b)=>a.name.localeCompare(b.name,'de',{numeric:true}));
+  $('#dlgTitle').textContent='Neue Titel für „'+f.name+'“';
+  $('#cname').value=(f.eigen&&f.eigen.name)||'';
+  drawOrder();$('#dlg').classList.add('show');
+}
+function drawOrder(){
+  const ul=$('#order');ul.innerHTML='';
+  files.forEach((file,i)=>{
+    const li=document.createElement('li');li.draggable=true;
+    li.innerHTML=`<span class="n">${i+1}.</span><span class="t">${esc(file.name)}</span>`;
+    const mk=(t,dis,fn)=>{const b=document.createElement('button');b.textContent=t;b.disabled=dis;b.onclick=fn;li.appendChild(b);};
+    mk('↑',i===0,()=>move(i,i-1));
+    mk('↓',i===files.length-1,()=>move(i,i+1));
+    mk('✕',false,()=>{files.splice(i,1);drawOrder();});
+    li.addEventListener('dragstart',e=>{dragIdx=i;e.dataTransfer.effectAllowed='move';});
+    li.addEventListener('dragover',e=>e.preventDefault());
+    li.addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();
+      if(dragIdx!==null)move(dragIdx,i);
+      else if(e.dataTransfer.files.length){files.push(...[...e.dataTransfer.files].filter(x=>x.size>0));drawOrder();}
+      dragIdx=null;});
+    ul.appendChild(li);
+  });
+  $('#go').disabled=!files.length;
+}
+function move(a,b){if(b<0||b>=files.length)return;const [x]=files.splice(a,1);files.splice(b,0,x);drawOrder();}
+$('#order').addEventListener('dragover',e=>e.preventDefault());
+$('#order').addEventListener('drop',e=>{e.preventDefault();
+  if(dragIdx===null&&e.dataTransfer.files.length){files.push(...[...e.dataTransfer.files].filter(x=>x.size>0));drawOrder();}
+  dragIdx=null;});
+$('#go').onclick=async()=>{
+  const f=cur,list=files.slice(),name=$('#cname').value.trim();
+  $('#dlg').classList.remove('show');
+  const s=Math.random().toString(36).slice(2)+Date.now().toString(36);
+  const names=[];
+  try{
+    for(let i=0;i<list.length;i++){
+      busy(`Datei ${i+1} von ${list.length} wird übernommen …\n${list[i].name}`);
+      const n=String(i).padStart(3,'0')+'__'+list[i].name.replace(/[\/\\]/g,'_');
+      await api(`/api/upload?s=${s}&n=${encodeURIComponent(n)}`,{method:'POST',body:list[i]});
+      names.push(n);
+    }
+    busy('Wird umgewandelt und auf die Karte geschrieben …\nBei langen Hörspielen kann das einige Minuten dauern.');
+    await post('/api/aufspielen',{karte:card(),key:f.key,session:s,reihenfolge:names,name});
+  }catch(e){alert('Fehler: '+e.message);}
+  busy('');loadFigs();
+};
+$('#cancel').onclick=()=>$('#dlg').classList.remove('show');
+$('#picker').onchange=()=>{openDlg(cur,[...$('#picker').files]);$('#picker').value='';};
+
+// ---- Kopfzeile ----
+$('#reload').onclick=loadCards;
+$('#card').onchange=loadFigs;
+$('#export').onclick=()=>{location.href='/api/export.csv?karte='+encodeURIComponent(card());};
+$('#restoreAll').onclick=()=>{
+  if(confirm('Alle überschriebenen Figuren wieder mit deinen Titeln bespielen?'))run2('/api/alle-zurueck',{karte:card()},'Eigene Titel werden aufgespielt …');
+};
+$('#unhideAll').onclick=()=>{
+  if(confirm('Bei allen Figuren das LIVE-Flag entfernen?'))run2('/api/alle-unhide',{karte:card()},'LIVE-Flags werden entfernt …');
+};
+$('#quit').onclick=async()=>{
+  try{await post('/api/beenden',{});}catch(e){}
+  document.body.innerHTML='<p style="padding:40px;text-align:center">TonieTausch wurde beendet. Du kannst dieses Fenster schliessen.</p>';
+};
+window.addEventListener('dragover',e=>e.preventDefault());
+window.addEventListener('drop',e=>e.preventDefault());
+
+// ---- Abspielen ----
+let chap=[];
+const fmt=s=>{s=Math.floor(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0');};
+async function play(f){
+  if(!$('#audio').canPlayType('audio/ogg; codecs="opus"')){alert('Abspielen funktioniert nur in Chrome oder Edge.');return;}
+  busy('Wiedergabe wird vorbereitet …');
+  try{
+    const r=await post('/api/abspielen',{karte:card(),key:f.key});
+    chap=r.kapitel;
+    $('#pName').textContent=f.name;
+    const a=$('#audio');a.src=r.src;
+    const ol=$('#chapters');ol.innerHTML='';
+    chap.forEach(c=>{const li=document.createElement('li');li.textContent=c.titel+' ('+fmt(c.start)+')';li.onclick=()=>{a.currentTime=c.start;a.play();};ol.appendChild(li);});
+    $('#player').hidden=false;document.body.classList.add('playing');
+    busy('');a.play().catch(()=>{});
+  }catch(e){busy('');alert(e.message);}
+}
+$('#audio').ontimeupdate=()=>{const t=$('#audio').currentTime;let k=0;chap.forEach((c,i)=>{if(t>=c.start)k=i;});[...$('#chapters').children].forEach((li,i)=>li.classList.toggle('on',i===k));};
+$('#pClose').onclick=()=>{const a=$('#audio');a.pause();a.removeAttribute('src');a.load();$('#player').hidden=true;document.body.classList.remove('playing');};
+
+// ---- SD-Karte ----
+const gb=b=>(b/1e9).toFixed(1).replace('.',',')+' GB';
+async function sdLoad(){
+  const {sicherungen}=await api('/api/sicherungen');
+  $('#sdList').innerHTML=sicherungen.map(s=>`<li>💾 ${esc(s.karte)} – ${esc(s.datum)} – ${s.dateien} Dateien, ${gb(s.groesse)}</li>`).join('')||'<li>Noch keine Sicherung.</li>';
+  $('#sdSrc').innerHTML=sicherungen.map(s=>`<option value="${esc(s.name)}">${esc(s.karte)} – ${esc(s.datum)}</option>`).join('');
+  await sdDevs();
+}
+async function sdDevs(){
+  const {laufwerke}=await api('/api/laufwerke');
+  const c=card()||'',vol=c.split('/').pop(),drv=c.slice(0,2);
+  $('#sdDev').innerHTML=laufwerke.map(d=>{
+    const akt=d.volumes.some(v=>(vol&&v===vol)||(/^[A-Z]:$/i.test(drv)&&v.toUpperCase().startsWith(drv.toUpperCase())));
+    const l=d.name+' – '+gb(d.groesse)+(d.volumes.length?' – '+d.volumes.join(', '):'')+(akt?' ⚠️ aktuelle Karte':'');
+    return `<option value="${esc(d.dev)}" data-label="${esc(l)}">${esc(l)}</option>`;}).join('')||'<option value="">Keine Wechselmedien gefunden</option>';
+  $('#sdPrep').disabled=!laufwerke.length||!$('#sdSrc').value;
+}
+$('#sdBtn').onclick=async()=>{$('#sd').classList.add('show');try{await sdLoad();}catch(e){alert(e.message);}};
+$('#sdClose').onclick=()=>$('#sd').classList.remove('show');
+$('#sdDevReload').onclick=()=>sdDevs().catch(e=>alert(e.message));
+$('#sdSrc').onchange=()=>{$('#sdPrep').disabled=!$('#sdDev').value||!$('#sdSrc').value;};
+$('#sdBackup').onclick=async()=>{
+  if(!card()){alert('Keine Karte ausgewählt.');return;}
+  busy('Karte wird komplett gesichert …\nDas kann einige Minuten dauern.');
+  try{const r=await post('/api/karte-sichern',{karte:card()});busy('');alert(`Gesichert: ${r.dateien} Dateien, ${gb(r.groesse)}.`);}
+  catch(e){busy('');alert(e.message);}
+  sdLoad().catch(()=>{});
+};
+$('#sdPrep').onclick=async()=>{
+  const o=$('#sdDev').selectedOptions[0];if(!o||!o.value)return;
+  const t=prompt(`ACHTUNG: Alle Daten auf\n\n${o.dataset.label}\n\nwerden gelöscht.\nZum Bestätigen LÖSCHEN eingeben:`);
+  if(t!=='LÖSCHEN')return;
+  busy('Karte wird formatiert und befüllt …\nDas kann einige Minuten dauern.');
+  try{const r=await post('/api/vorbereiten',{sicherung:$('#sdSrc').value,laufwerk:o.value});busy('');alert(`Fertig: ${r.dateien} Dateien auf die neue Karte kopiert.`);}
+  catch(e){busy('');alert(e.message);}
+  sdLoad().catch(()=>{});loadCards();
+};
+
+// ---- Übertragen ----
+let trFrom=null,trTo=null;
+function openTransfer(f){
+  trFrom=f;trTo=null;$('#trGo').disabled=true;
+  $('#trTitle').textContent='„'+f.name+'“ übertragen auf …';
+  const box=$('#trList');box.innerHTML='';
+  figs.filter(x=>!x.system&&x.key!==f.key).forEach(x=>{
+    const d=document.createElement('div');d.className='t';
+    d.innerHTML=figImg(x.bild)+`<div>${esc(x.name)}</div>`;
+    d.onclick=()=>{trTo=x;[...box.children].forEach(c=>c.classList.remove('sel'));d.classList.add('sel');$('#trGo').disabled=false;};
+    box.appendChild(d);
+  });
+  if(!box.children.length)box.innerHTML='<p class="serie">Keine andere Figur auf der Karte.</p>';
+  $('#tr').classList.add('show');
+}
+$('#trCancel').onclick=()=>$('#tr').classList.remove('show');
+$('#trGo').onclick=async()=>{
+  if(!trFrom||!trTo)return;
+  if(!confirm('Inhalt von „'+trFrom.name+'“ auf „'+trTo.name+'“ übertragen?\nDer bisherige Inhalt von „'+trTo.name+'“ wird gesichert.'))return;
+  $('#tr').classList.remove('show');
+  run2('/api/uebertragen',{karte:card(),von:trFrom.key,nach:trTo.key},'Inhalt wird übertragen …');
+};
+
+// ---- Figur zuordnen ----
+let asFig=null,asSel=null,asTimer=null,asSeq=0;
+function openAssign(f){
+  asFig=f;asSel=null;$('#asGo').disabled=true;
+  $('#asTitle').textContent='Figur zuordnen: '+f.name;
+  $('#asQ').value='';$('#asList').innerHTML='<p class="serie">Suchbegriff eingeben …</p>';
+  $('#as').classList.add('show');setTimeout(()=>$('#asQ').focus(),50);
+}
+$('#asQ').oninput=()=>{clearTimeout(asTimer);asTimer=setTimeout(asSearch,300);};
+async function asSearch(){
+  const q=$('#asQ').value.trim(),box=$('#asList'),my=++asSeq;
+  asSel=null;$('#asGo').disabled=true;
+  if(q.length<2){box.innerHTML='<p class="serie">Suchbegriff eingeben …</p>';return;}
+  let r;
+  try{r=(await api('/api/suche?q='+encodeURIComponent(q))).treffer;}
+  catch(e){if(my===asSeq)box.innerHTML='<p class="serie">'+esc(e.message)+'</p>';return;}
+  if(my!==asSeq)return;
+  box.innerHTML='';
+  r.forEach(t=>{
+    const d=document.createElement('div');d.className='t';
+    d.innerHTML=figImg(t.bild)+`<div><b>${esc(t.name)}</b></div><div class="serie">${esc(t.serie)}${t.sprache?' · '+esc(t.sprache):''}</div>`;
+    d.onclick=()=>{asSel=t;[...box.children].forEach(c=>c.classList.remove('sel'));d.classList.add('sel');$('#asGo').disabled=false;};
+    box.appendChild(d);
+  });
+  if(!r.length)box.innerHTML='<p class="serie">Nichts gefunden. Anderen Begriff versuchen.</p>';
+}
+$('#asCancel').onclick=()=>$('#as').classList.remove('show');
+$('#asGo').onclick=async()=>{
+  if(!asFig||!asSel)return;
+  $('#as').classList.remove('show');
+  try{await post('/api/zuordnen',{key:asFig.key,figur:asSel});}catch(e){alert(e.message);}
+  loadFigs();
+};
+
+loadCards();
+</script>
+</body></html>
