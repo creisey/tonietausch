@@ -4,6 +4,8 @@ Kleine App für **macOS und Windows**, mit der du Toniebox-Figuren eigene Hörsp
 
 > **Inoffizielles Hobbyprojekt.** Nicht mit tonies SE oder der Boxine GmbH verbunden und nicht von ihnen unterstützt. „Toniebox“ und „Tonie“ sind Marken ihrer jeweiligen Inhaber. Nutzung auf eigenes Risiko und nur mit eigenen, rechtmässig erworbenen Inhalten. Das Öffnen der Box geschieht auf eigene Verantwortung.
 
+![TonieTausch Screenshot](screen.png)
+
 ## Funktionen
 
 - Figuren der SD-Karte mit Bild und Namen anzeigen (über die Community-Liste `tonies.json`)
